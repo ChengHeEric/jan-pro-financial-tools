@@ -141,7 +141,8 @@ total_cost = (
     (monthly_billing * royalty_rate) +
     (monthly_billing * management_fee_rate) +
     (monthly_billing * insurance_rate) +
-    (monthly_billing * commission_rate)
+    (monthly_billing * commission_rate) +
+    upgrade_fee
 )
 
 net_profit = monthly_billing - total_cost
