@@ -2,6 +2,50 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 
+# session defaults for inputs to allow import overrides
+def handle_upload():
+    if st.session_state.upgrade_fee_import is not None:
+        try:
+            # read file
+            imported_df = pd.read_csv(st.session_state.upgrade_fee_import)
+            if {"Description", "Value"}.issubset(imported_df.columns):
+                item_to_value = dict(zip(imported_df["Description"], imported_df["Value"]))
+                
+                # Update Session State
+                # Because this happens in a callback, Streamlit allows this modification
+                st.session_state["billing"] = _parse_number(item_to_value.get("Contract Monthly Billing", 0.0))
+                st.session_state["multiplier"] = _parse_number(item_to_value.get("Multiplier", 4.0))
+                st.session_state["credits"] = _parse_number(item_to_value.get("Credits", 0.0))
+                st.session_state["interest_rate"] = _parse_number(item_to_value.get("Interest Rate %", 10.0))
+                st.session_state["terms"] = int(_parse_number(item_to_value.get("Payment Terms (Months)", 0)))
+                
+                st.toast("Successfully loaded previous data!")
+        except Exception as e:
+            st.error(f"failed to read fil: {e}")
+
+default_state = {
+    "billing": 0.0,
+    "multiplier": 4.0,
+    "credits": 0.0,
+    "dp_pct": 25.0,
+    "interest_rate": 10.0,
+    "terms": 0,
+}
+for _k, _v in default_state.items():
+    st.session_state.setdefault(_k, _v)
+
+
+def _parse_number(value) -> float:
+    """Best-effort float parser that strips $ , % symbols."""
+    if isinstance(value, (int, float)):
+        return float(value)
+    text = str(value)
+    cleaned = text.replace("$", "").replace(",", "").replace("%", "").strip()
+    try:
+        return float(cleaned)
+    except ValueError:
+        return 0.0
+
 st.set_page_config(page_title="New Contract Upgrade Fee Estimator", layout="centered")
 
 st.image("pages/logo.png", width=380)
@@ -12,17 +56,47 @@ st.write("Please enter the parameters in the sidebar for real-time calculation:"
 
 st.sidebar.header("Input Data")
 
-billing = st.sidebar.number_input("Monthly Billing", value=0.0, step=100.0, help="Enter the monthly billing amount for the contract.")
+billing = st.sidebar.number_input(
+    "Monthly Billing",
+    step=100.0,
+    key="billing",
+    help="Enter the monthly billing amount for the contract.",
+)
 
-multiplier = st.sidebar.number_input("Multiplier", value=4.0, step=0.1, help="Enter the upgrade fee multiplier based on contract terms.")
+multiplier = st.sidebar.number_input(
+    "Multiplier",
+    step=0.1,
+    key="multiplier",
+    help="Enter the upgrade fee multiplier based on contract terms.",
+)
 
-credits = st.sidebar.number_input("Credits", value=0.0, step=100.0, help="Enter any credits applicable to the upgrade fee.")
+credits = st.sidebar.number_input(
+    "Credits",
+    step=100.0,
+    key="credits",
+    help="Enter any credits applicable to the upgrade fee.",
+)
 
-dp_pct = st.sidebar.number_input("Down Payment %", value=25.00, format="%.2f", help="Enter the down payment percentage for the upgrade.")
+dp_pct = st.sidebar.number_input(
+    "Down Payment %",
+    format="%.2f",
+    key="dp_pct",
+    help="Enter the down payment percentage for the upgrade.",
+)
 
-interest_rate = st.sidebar.number_input("Interest Rate %", value=10.00, format="%.2f", help="Enter the interest rate for financing the upgrade.")
+interest_rate = st.sidebar.number_input(
+    "Interest Rate %",
+    format="%.2f",
+    key="interest_rate",
+    help="Enter the interest rate for financing the upgrade.",
+)
 
-terms = st.sidebar.number_input("Payment Terms (Months)", value=0, step=1, help="Enter the number of months over which the upgrade fee will be paid.")
+terms = st.sidebar.number_input(
+    "Payment Terms (Months)",
+    step=1,
+    key="terms",
+    help="Enter the number of months over which the upgrade fee will be paid.",
+)
 
 
 # --- Calculation Logic ---
@@ -36,7 +110,7 @@ monthly_payment = total_financed / terms if terms > 0 else 0
 
 # --- Results Display ---
 st.divider()
-st.subheader("📊 Estimated Results Summary")
+st.subheader("Estimated Results Summary")
 
 res1, res2, res3 = st.columns(3)
 res1.metric("Total Upgrade Amount", f"${upgrade_total:,.2f}")
@@ -87,13 +161,13 @@ df_results = pd.DataFrame(data)
 
 
 st.divider()
-st.subheader("📈 Financial Visualization")
+st.subheader("Financial Visualization")
 
-# 创建两列，分别显示饼图和对比图
+# create two visualizations side by side
 viz_col1, viz_col2 = st.columns(2)
 
 with viz_col1:
-    # 1. 升级费构成饼图
+    # 1. upgrade fee composition pie chart
     pie_data = pd.DataFrame({
         "Category": ["Down Payment", "Principal Financed", "Credits"],
         "Amount": [dp_amount, amt_financed_base, credits]
@@ -110,7 +184,7 @@ with viz_col1:
     st.plotly_chart(fig_pie, use_container_width=True)
 
 with viz_col2:
-    # 2. 本金与利息对比图
+    # 2. interest vs principal bar chart
     bar_data = pd.DataFrame({
         "Type": ["Principal", "Interest"],
         "Amount": [amt_financed_base, interest_amt]
@@ -135,8 +209,20 @@ st.subheader("3. Export Data")
 csv = df_results.to_csv(index=False).encode('utf-8')
 
 st.download_button(
-    label="📥 Download Estimate as CSV",
+    label="Download Estimate as CSV",
     data=csv,
     file_name='upgrade_fee_estimate.csv',
     mime='text/csv',
+)
+
+# --- 5. Import previously exported estimate (CSV) ---
+st.markdown("---")
+st.subheader("4. Import Previous Estimate (CSV)")
+
+# set key for uploader to avoid conflicts
+st.file_uploader(
+    "Choose CSV file", 
+    type="csv", 
+    key="upgrade_fee_import", 
+    on_change=handle_upload  
 )

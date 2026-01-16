@@ -8,7 +8,7 @@ st.title("Welcome to the Jan-Pro Tool Box for CBOs")
 st.markdown("Please select a tool from the left sidebar")
 
 
-st.divider()
+st.divider() 
 
 # Use column layout to display tool introductions
 col1, col2, col3 = st.columns(3)

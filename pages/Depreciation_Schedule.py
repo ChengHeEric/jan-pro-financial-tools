@@ -3,6 +3,7 @@ import pandas as pd
 import plotly.express as px
 from datetime import datetime as time
 import io
+import openpyxl
 
 st.set_page_config(page_title="Multi-Asset Depreciation Tool", layout="wide")
 
@@ -21,7 +22,7 @@ def get_category(asset_type):
 
 # 2. interactive asset input area
 st.subheader("Asset Input")
-st.info("You can add, modify, or delete rows directly in the table below.")
+st.info("You can add, modify, or delete rows directly in the table below. If you want to import previous data, use the upload feature at the bottom of this page.")
 
 # initialize a sample table
 if "df_assets" not in st.session_state:
@@ -172,7 +173,7 @@ if not full_schedule.empty:
 
     # --- Enhanced export functionality ---
     st.markdown("---")
-    st.subheader("📥 Export Financial Report")
+    st.subheader("Export Financial Report")
 
     # 1. Prepare summary data (consistent with web display)
     category_df = edited_df.copy()
@@ -202,12 +203,30 @@ if not full_schedule.empty:
         # You can add more Excel styles here...
 
 
-
     # 3. Provide download button
     st.download_button(
-        label="🚀 Download All Information (Excel)",
+        label="Download All Information (Excel)",
         data=buffer.getvalue(),
         file_name=f"Asset_Report_{time.now().strftime('%Y%m%d')}.xlsx",
         mime="application/vnd.ms-excel",
         help="This will export the input list, the full schedule, and all summaries into a single Excel file."
     )
+    
+    # 4. import button to load previous data
+    st.markdown("#### Import Previous Asset Data")
+    uploaded_file = st.file_uploader("Upload an Excel file with asset data", type=["xlsx"])
+    if uploaded_file is not None:
+        try:
+            imported_df = pd.read_excel(uploaded_file, sheet_name='Input Assets')
+            # Validate columns
+            expected_cols = {"Asset Name", "Type", "Cost", "Purchase Year", "Useful Life (Years)"}
+            wb = openpyxl.load_workbook(uploaded_file)
+            ws = wb.active
+            if expected_cols.issubset(set(imported_df.columns)):
+                st.session_state.df_assets = imported_df[["Asset Name", "Type", "Cost", "Purchase Year", "Useful Life (Years)"]]
+                st.success("Data imported successfully! The asset table has been updated.")
+                st.rerun()  # Refresh the page to reflect changes
+            else:
+                st.error(f"Uploaded file is missing required columns. Expected columns: {expected_cols}")
+        except Exception as e:
+            st.error(f"Error reading the uploaded file: {e}")

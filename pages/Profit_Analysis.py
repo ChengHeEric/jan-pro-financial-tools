@@ -1,6 +1,11 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+import re
+
+# store imported values between reruns
+if "imported_values" not in st.session_state:
+    st.session_state["imported_values"] = None
 
 # page configuration
 st.set_page_config(page_title="Profit Analysis Tool", layout="centered")
@@ -20,6 +25,8 @@ monthly_billing = st.sidebar.number_input("Contract Monthly Billing ($)", min_va
 supply_cost = st.sidebar.number_input("Supply Cost ($)", min_value=0.0, value=0.0,help="Enter the estimated amount you spend on supplies and special equipment. Industry standard is 3% of monthly billing.")
 
 other_cost = st.sidebar.number_input("Other Costs ($)", min_value=0.0, value=0.0,help="Enter any additional costs not covered elsewhere.")
+
+upgrade_fee = st.sidebar.number_input("Upgrade Fee ($)", min_value=0.0, value=0.0,help="Enter any upgrade fees associated with the contract.")
 
 cleaning_mode = st.sidebar.selectbox(
     "Cleaning Service Mode",
@@ -47,7 +54,7 @@ for i in range(int(num_employees)):
 
     labor_cost += hourly_wage * hours_per_night * nights_per_week * weeks_per_month
     
-    # 保存该员工的所有详细信息
+    # save the employee record for export
     employee_records.append({
         "Item": f"Employee {i+1}",
         "Hourly Wage ($)": hourly_wage,
@@ -56,6 +63,63 @@ for i in range(int(num_employees)):
         "Weeks/Month": weeks_per_month,
         "Monthly Cost ($)": hourly_wage * hours_per_night * nights_per_week * weeks_per_month
     })
+
+
+# apply imported values (if any) after widgets are rendered
+imported_values = st.session_state.get("imported_values")
+if imported_values:
+    monthly_billing = imported_values.get("monthly_billing", monthly_billing)
+    supply_cost = imported_values.get("supply_cost", supply_cost)
+    other_cost = imported_values.get("other_cost", other_cost)
+    cleaning_mode = imported_values.get("cleaning_mode", cleaning_mode)
+
+    imported_emps = imported_values.get("employee_records") or []
+    if imported_emps:
+        employee_records = imported_emps
+        labor_cost = sum(emp.get("Monthly Cost ($)", 0.0) for emp in imported_emps)
+    else:
+        labor_cost = imported_values.get("labor_cost", labor_cost)
+
+
+# --- Helpers for CSV import ---
+def _parse_money(value: str) -> float:
+    """Convert strings like "$1,234.56" to float; fallback to 0.0."""
+    if isinstance(value, (int, float)):
+        return float(value)
+    if pd.isna(value):
+        return 0.0
+    cleaned = str(value).replace("$", "").replace(",", "").replace("%", "").strip()
+    try:
+        return float(cleaned)
+    except ValueError:
+        return 0.0
+
+
+def _parse_employee_detail(detail_str: str) -> dict:
+    """Parse the exported employee detail row into a structured record."""
+    wage_match = re.search(r"Wage:\s*\$?([\d.,]+)", detail_str)
+    hours_match = re.search(r"Hours:\s*([\d.]+)", detail_str)
+    nights_match = re.search(r"Nights:\s*([\d.]+)", detail_str)
+    weeks_match = re.search(r"Weeks:\s*([\d.]+)", detail_str)
+    total_match = re.search(r"Total:\s*\$?([\d.,]+)", detail_str)
+
+    if not all([wage_match, hours_match, nights_match, weeks_match, total_match]):
+        return {}
+
+    hourly_wage = _parse_money(wage_match.group(1))
+    hours_per_night = float(hours_match.group(1))
+    nights_per_week = float(nights_match.group(1))
+    weeks_per_month = float(weeks_match.group(1))
+    monthly_cost = _parse_money(total_match.group(1))
+
+    return {
+        "Item": "Imported Employee",
+        "Hourly Wage ($)": hourly_wage,
+        "Hours/Night": hours_per_night,
+        "Nights/Week": nights_per_week,
+        "Weeks/Month": weeks_per_month,
+        "Monthly Cost ($)": monthly_cost,
+    }
 
 # calculation logic
 
@@ -90,6 +154,12 @@ with col1:
     st.metric("Royalty", f"${monthly_billing * royalty_rate:,.2f}",help="Royalty fees are what you pay to the franchisor for the right to operate under their brand. This fee is 10% of your gross sales or revenue.")
 
     st.metric("Management Fee", f"${monthly_billing * management_fee_rate:,.2f}",help="Management fees cover the costs associated with managing and supporting the franchise network. This fee is typically 5% of your gross sales or revenue.")
+    
+    st.metric("Supply Cost", f"${supply_cost:,.2f}",help="Supply costs include expenses for cleaning supplies, equipment, and other materials needed to perform the cleaning services.")
+    
+    st.metric("Other Costs", f"${other_cost:,.2f}",help="Other costs encompass any additional expenses that do not fall under the specified categories, such as transportation, marketing, or administrative costs.")
+    
+    st.metric("Upgrade Fee", f"${upgrade_fee:,.2f}",help="Upgrade fees are costs associated with enhancing or upgrading the services used in the contract. ")
 
     st.metric("Insurance", f"${monthly_billing * insurance_rate:,.2f}",help="Insurance costs are essential for protecting your business against potential risks and liabilities. This fee is typically around 5.5% of your gross sales or revenue.")
 
@@ -239,3 +309,46 @@ st.download_button(
     file_name='detailed_profit_analysis.csv',
     mime='text/csv',
 )
+
+# --- 5. Import previously exported report (placed at bottom) ---
+st.markdown("---")
+st.subheader("📤 Import Previous Profit Report (CSV)")
+uploaded_file = st.file_uploader("Choose a CSV file", type="csv", key="profit_import")
+
+if uploaded_file is not None:
+    try:
+        imported_df = pd.read_csv(uploaded_file)
+
+        if not {"Item", "Value"}.issubset(imported_df.columns):
+            st.error("The uploaded CSV must have 'Item' and 'Value' columns.")
+        else:
+            item_to_value = dict(zip(imported_df["Item"], imported_df["Value"]))
+
+            imported_payload = {
+                "monthly_billing": _parse_money(item_to_value.get("Contract Monthly Billing", monthly_billing)),
+                "supply_cost": _parse_money(item_to_value.get("Supply Cost", supply_cost)),
+                "other_cost": _parse_money(item_to_value.get("Other Costs", other_cost)),
+                "cleaning_mode": item_to_value.get("Cleaning Mode", cleaning_mode),
+            }
+
+            parsed_employees = []
+            for item_label, detail in item_to_value.items():
+                if isinstance(item_label, str) and "Employee" in item_label and "Details" in item_label:
+                    parsed = _parse_employee_detail(str(detail))
+                    if parsed:
+                        parsed["Item"] = item_label
+                        parsed_employees.append(parsed)
+
+            if parsed_employees:
+                imported_payload["employee_records"] = parsed_employees
+                imported_payload["labor_cost"] = sum(emp.get("Monthly Cost ($)", 0.0) for emp in parsed_employees)
+            else:
+                imported_payload["employee_records"] = []
+                imported_payload["labor_cost"] = _parse_money(item_to_value.get("Total Labor Cost", labor_cost))
+
+            st.session_state["imported_values"] = imported_payload
+            st.success("File uploaded. Values will be applied above.")
+            st.dataframe(imported_df)
+            st.rerun()
+    except Exception as e:
+        st.error(f"Error reading the uploaded file: {e}")
