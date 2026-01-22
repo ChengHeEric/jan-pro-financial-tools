@@ -12,7 +12,7 @@ st.set_page_config(page_title="Profit Analysis Tool", layout="centered")
 
 # Title
 # insert company logo
-st.image("pages/logo.png")
+st.image("pages/logo.png", width=380)
 st.title("Profit Calculator")
 st.write("Please enter the parameters in the sidebar for real-time calculation:")
 st.markdown("---")
