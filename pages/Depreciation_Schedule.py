@@ -44,7 +44,6 @@ edited_df = st.data_editor(
         "Purchase Year": st.column_config.NumberColumn("Purchase Year", min_value=1900, max_value=2100, step=1),
         "Useful Life (Years)": st.column_config.NumberColumn("Life (Y)", min_value=1),
     },
-    use_container_width=True,
     hide_index=True
 )
 
@@ -99,7 +98,6 @@ if not full_schedule.empty:
             "Total Annual Depreciation": "${:,.2f}",
             "Cumulative Depreciation": "${:,.2f}"
         },precision=2),
-        use_container_width=True,
         hide_index=True
     )
 
@@ -119,7 +117,7 @@ if not full_schedule.empty:
         # force display percentage
         fig.update_traces(textinfo='percent+label')
 
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig)
     
     with col2:
         
@@ -146,7 +144,7 @@ if not full_schedule.empty:
 
         fig_cat.update_traces(textinfo='percent+label')
 
-        st.plotly_chart(fig_cat, use_container_width=True)
+        st.plotly_chart(fig_cat)
 
 # --- Added: Visualization of Depreciation Distribution by Year ---
     st.subheader("Depreciation Distribution by Year")
@@ -163,8 +161,7 @@ if not full_schedule.empty:
         # x="Year" will set the year as the x-axis, other columns will be stacked automatically
         st.bar_chart(
             chart_data, 
-            x="Year", 
-            use_container_width=True
+            x="Year"
         )
         
         st.caption("Bar chart showing annual depreciation distribution across different assets over the years.")

@@ -181,7 +181,7 @@ with viz_col1:
         hole=0.4,
         color_discrete_sequence=px.colors.sequential.Teal
     )
-    st.plotly_chart(fig_pie, use_container_width=True)
+    st.plotly_chart(fig_pie)
 
 with viz_col2:
     # 2. interest vs principal bar chart
@@ -199,7 +199,7 @@ with viz_col2:
         color='Type',
         color_discrete_map={"Principal": "#2E86C1", "Interest": "#E74C3C"}
     )
-    st.plotly_chart(fig_bar, use_container_width=True)
+    st.plotly_chart(fig_bar)
 
 # --- 4. Export Functionality ---
 st.markdown("---")
