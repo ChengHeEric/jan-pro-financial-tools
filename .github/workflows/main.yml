@@ -1,0 +1,15 @@
+name: Streamlit Keep Alive
+
+on:
+  schedule:
+    # 每 11 小时运行一次 (UTC 时间)
+    - cron: '0 */11 * * *'
+  workflow_dispatch:
+
+jobs:
+  ping_app:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send GET request to Streamlit App
+        run: |
+          curl -I https://jan-pro-financial-tools-fwwlahclydtodovemkzvbz.streamlit.app/Profit_Analysis
